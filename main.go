@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"net/http"
@@ -10,51 +10,63 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"web_app/controller"
 	"web_app/dao/mysql"
 	"web_app/dao/redis"
 	"web_app/logger"
-	"web_app/routes"
+	"web_app/pkg/snowflake"
+	"web_app/router"
 	"web_app/settings"
 )
 
 //Go Web开发较通用的脚手架模板
 
-func main(){
+func main() {
 
 	//1.加载配置
-	if err := settings.Init();err!=nil{
-		fmt.Println("init settings failed,err:%v\n",err)
+	if err := settings.Init(); err != nil {
+		fmt.Println("init settings failed,err:%v\n", err)
 		return
 	}
 
 	//2.初始化日志
-	if err := logger.Init();err != nil{
-		fmt.Println("init logger failed,err:%v\n",err)
+	if err := logger.Init(settings.Conf.LogConf,settings.Conf.Mode); err != nil {
+		fmt.Println("init logger failed,err:%v\n", err)
 		return
 	}
 	defer zap.L().Sync()
 	zap.L().Debug("logger init success...")
 
 	//3.初始化MySQL
-	if err := mysql.Init();err != nil{
-		fmt.Println("init mysql failed,err:%v\n",err)
+	if err := mysql.Init(settings.Conf.MySQLConf); err != nil {
+		fmt.Println("init mysql failed,err:%v\n", err)
 		return
 	}
 	defer mysql.Close()
 
 	//4.初始化Redis
-	if err := redis.Init();err != nil{
-		fmt.Println("init redis failed,err:%v\n",err)
+	if err := redis.Init(settings.Conf.RedisConf); err != nil {
+		fmt.Println("init redis failed,err:%v\n", err)
 		return
 	}
 	defer redis.Close()
 
+	if err := snowflake.Init(settings.Conf.AppConf.StartTime,settings.Conf.AppConf.MachineID); err != nil {
+		fmt.Println("init snowflake failed,err:%v\n", err)
+		return
+	}
+	//初始化gin框架内置的校验器使用的翻译器
+	if err := controller.InitTrans("zh");err != nil{
+		fmt.Println("init validator trans failed,err:%v\n", err)
+		return
+	}
+
 	//5.注册路由
-	r := routes.SetUp()
+	r := routes.SetUpRouter(settings.Conf.Mode)
 
 	//6.启动服务（优雅关机）
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s",viper.GetString("app.port")),
+		Addr:    fmt.Sprintf(":%s", viper.GetString("app.port")),
 		Handler: r,
 	}
 
@@ -71,8 +83,8 @@ func main(){
 	// kill -2 发送 syscall.SIGINT 信号，我们常用的Ctrl+C就是触发系统SIGINT信号
 	// kill -9 发送 syscall.SIGKILL 信号，但是不能被捕获，所以不需要添加它
 	// signal.Notify把收到的 syscall.SIGINT或syscall.SIGTERM 信号转发给quit
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)  // 此处不会阻塞
-	<-quit  // 阻塞在此，当接收到上述两种信号时才会往下执行
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM) // 此处不会阻塞
+	<-quit                                               // 阻塞在此，当接收到上述两种信号时才会往下执行
 	zap.L().Info("Shutdown Server ...")
 	// 创建一个5秒超时的context
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

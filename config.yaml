@@ -1,7 +1,10 @@
 app:
   name: "web_app"
   mode: "dev"
-  port: 8081
+  port: 8080
+  version: "v0.0.1"
+  start_time: "2022-05-08"
+  machine_id: 1
 
 log:
   level: "debug"
@@ -15,9 +18,9 @@ mysql:
   port: "3306"
   user: "root"
   password: "root123"
-  dbname: "sql_demo"
-  mysql.max_idle_conns:  50
-  mysql.max_open_conns: 200
+  dbname: "bluebell"
+  max_idle_conns:  50
+  max_open_conns: 200
 
 redis:
   host: "127.0.0.1"

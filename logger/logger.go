@@ -2,7 +2,9 @@ package logger
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/spf13/viper"
+	"github.com/natefinch/lumberjack"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -10,32 +12,39 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
-	//"gin_zap_demo/config"
-	"github.com/natefinch/lumberjack"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"web_app/settings"
 )
 
 //var lg *zap.Logger
 //使用全局变量来记录日志会使日志变量太长，所以不使用  比如logger.lg.Debug()
 
 // Init 初始化Logger
-func Init() (err error) {
+func Init(cfg *settings.LogConf, mode string) (err error) {
 	//获取文件名
-	writeSyncer := getLogWriter(viper.GetString("log.filename"),
-		viper.GetInt("log.max_size"),
-		viper.GetInt("log.max_backups"),
-		viper.GetInt("log.max_age"),
-		)
+	writeSyncer := getLogWriter(
+		cfg.Filename,
+		cfg.MaxSize,
+		cfg.MaxBackups,
+		cfg.MaxAge,
+	)
 	encoder := getEncoder()
 	var l = new(zapcore.Level)
 	//解析 level
-	err = l.UnmarshalText([]byte(viper.GetString("log.level")))
+	err = l.UnmarshalText([]byte(cfg.Level))
 	if err != nil {
 		return
 	}
-	core := zapcore.NewCore(encoder, writeSyncer, l)
-
+	var core zapcore.Core
+	if mode == "dev" {
+		// 开发模式，日志输出到终端
+		consoleEnbcoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+		core = zapcore.NewTee(
+			zapcore.NewCore(encoder,writeSyncer,l),  //输出到日志文件
+			zapcore.NewCore(consoleEnbcoder,zapcore.Lock(os.Stdout),zapcore.DebugLevel),//输出到终端
+		)
+	} else {
+		core = zapcore.NewCore(encoder, writeSyncer, l)
+	}
 	lg := zap.New(core, zap.AddCaller())
 	zap.ReplaceGlobals(lg) // 替换zap包中全局的logger实例，后续在其他包中只需使用zap.L()调用即可
 	return
